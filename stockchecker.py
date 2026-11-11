@@ -101,6 +101,10 @@ def main():
     if args.once or not avail:
         return 0
     send_kakao("🎉 허기보 재고 떴어요! " + ", ".join(avail))
+    # 알림을 보냈다는 표시 → 워크플로가 다음 단계에서 스스로 비활성화한다
+    if os.environ.get("GITHUB_OUTPUT"):
+        with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+            f.write("notified=true\n")
     return 0
 
 

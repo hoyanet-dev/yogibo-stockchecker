@@ -14,6 +14,10 @@ concurrency:
   group: stock-check
   cancel-in-progress: false
 
+permissions:
+  contents: read
+  actions: write   # 알림 후 이 워크플로를 스스로 비활성화하기 위해 필요
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -21,9 +25,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check stock and notify
+        id: check
         env:
           KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
           KAKAO_REFRESH_TOKEN: ${{ secrets.KAKAO_REFRESH_TOKEN }}
           KAKAO_CLIENT_SECRET: ${{ secrets.KAKAO_CLIENT_SECRET }}
           GH_PAT: ${{ secrets.GH_PAT }}
         run: python3 stockchecker.py ${{ inputs.test_kakao && '--test-kakao' || '' }}
+      - name: Disable workflow after notifying
+        if: steps.check.outputs.notified == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow disable stock-check --repo ${{ github.repository }}
