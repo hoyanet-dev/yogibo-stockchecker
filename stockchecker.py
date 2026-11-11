@@ -9,6 +9,7 @@
 
   python3 stockchecker.py --once   # 현재 재고만 출력 (알림 안 보냄)
   python3 stockchecker.py          # 재고 있으면 카톡 전송
+  python3 stockchecker.py --test-kakao  # 테스트 카톡 1회 전송
 """
 import argparse
 import json
@@ -84,7 +85,12 @@ def send_kakao(text):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--once", action="store_true", help="재고만 출력, 알림 안 보냄")
+    ap.add_argument("--test-kakao", action="store_true", help="재고와 상관없이 테스트 카톡 1회 전송")
     args = ap.parse_args()
+
+    if args.test_kakao:
+        send_kakao("✅ 요기보 재고 알림 테스트입니다. 이 메시지가 보이면 설정 완료!")
+        return 0
 
     stock = fetch_stock()
     print(stock)

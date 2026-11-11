@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "*/5 * * * *"   # 5분마다 (GitHub 부하에 따라 몇 분 밀릴 수 있음)
   workflow_dispatch:         # Actions 탭에서 수동 실행 가능
+    inputs:
+      test_kakao:
+        description: "재고와 상관없이 테스트 카톡 보내기"
+        type: boolean
+        default: false
 
 concurrency:
   group: stock-check
@@ -21,4 +26,4 @@ jobs:
           KAKAO_REFRESH_TOKEN: ${{ secrets.KAKAO_REFRESH_TOKEN }}
           KAKAO_CLIENT_SECRET: ${{ secrets.KAKAO_CLIENT_SECRET }}
           GH_PAT: ${{ secrets.GH_PAT }}
-        run: python3 stockchecker.py
+        run: python3 stockchecker.py ${{ inputs.test_kakao && '--test-kakao' || '' }}
