@@ -17,6 +17,8 @@ import os
 import re
 import subprocess
 import sys
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -85,27 +87,59 @@ def send_kakao(text):
     print("카카오톡 전송 완료")
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--once", action="store_true", help="재고만 출력, 알림 안 보냄")
-    ap.add_argument("--test-kakao", action="store_true", help="재고와 상관없이 테스트 카톡 1회 전송")
-    args = ap.parse_args()
-
-    if args.test_kakao:
-        send_kakao("✅ 재고 알림 테스트입니다.")
-        return 0
-
+def check_once():
+    """재고 확인 1회. 재고가 있으면 카톡 전송 후 True."""
     stock = fetch_stock()
-    print(stock)
+    print(stock, flush=True)
     avail = {c: n for c, n in stock.items() if n > 0}
-    if args.once or not avail:
-        return 0
+    if not avail:
+        return False
     send_kakao("🎉 허기보 재고 떴어요! " + ", ".join(avail))
     # 알림을 보냈다는 표시 → 워크플로가 다음 단계에서 스스로 비활성화한다
     if os.environ.get("GITHUB_OUTPUT"):
         with open(os.environ["GITHUB_OUTPUT"], "a") as f:
             f.write("notified=true\n")
-    return 0
+    return True
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--once", action="store_true", help="재고만 출력, 알림 안 보냄")
+    ap.add_argument("--test-kakao", action="store_true", help="재고와 상관없이 테스트 카톡 1회 전송")
+    ap.add_argument("--loop", type=int, default=0, metavar="SEC",
+                    help="SEC초 동안 --interval 간격으로 반복 확인 (재고 알림 시 즉시 종료)")
+    ap.add_argument("--interval", type=int, default=60, help="--loop 확인 간격(초), 기본 60")
+    args = ap.parse_args()
+
+    if args.test_kakao:
+        send_kakao("✅ 재고 알림 테스트입니다.")
+        return 0
+    if args.once:
+        print(fetch_stock())
+        return 0
+    if not args.loop:
+        check_once()
+        return 0
+
+    deadline, fails = time.time() + args.loop, 0
+    while True:
+        try:
+            if check_once():
+                return 0
+            fails = 0
+        except urllib.error.HTTPError as e:
+            if e.code in (400, 401, 403) and e.url.startswith("https://k"):  # 카카오 인증 문제는 재시도해도 소용없음
+                raise
+            fails += 1
+            print(f"확인 실패({fails}회 연속): {e}", flush=True)
+        except Exception as e:
+            fails += 1
+            print(f"확인 실패({fails}회 연속): {e}", flush=True)
+        if fails >= 10:
+            raise RuntimeError("10회 연속 확인 실패")
+        if time.time() + args.interval >= deadline:
+            return 0
+        time.sleep(args.interval)
 
 
 if __name__ == "__main__":

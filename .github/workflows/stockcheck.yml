@@ -2,26 +2,30 @@ name: stock-check
 
 on:
   schedule:
-    - cron: "*/5 * * * *"   # 5분마다 (GitHub 부하에 따라 몇 분 밀릴 수 있음)
-  workflow_dispatch:         # Actions 탭에서 수동 실행 가능
+    - cron: "*/5 * * * *"   # 예비용: 이어달리기가 끊겼을 때 다시 시작시킨다
+  workflow_dispatch:
     inputs:
       test_kakao:
         description: "재고와 상관없이 테스트 카톡 보내기"
         type: boolean
         default: false
+      loop_seconds:
+        description: "이번 실행이 반복 확인할 시간(초). 기본 20400 = 5시간 40분"
+        default: "20400"
 
+# 한 번에 하나만 실행. 대기 중인 실행은 1개까지만 유지된다.
 concurrency:
   group: stock-check
   cancel-in-progress: false
 
 permissions:
   contents: read
-  actions: write   # 알림 후 이 워크플로를 스스로 비활성화하기 위해 필요
+  actions: write   # 다음 실행 시작 / 알림 후 비활성화에 필요
 
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 355   # GitHub 한도 6시간보다 조금 짧게
     steps:
       - uses: actions/checkout@v4
       - name: Check stock and notify
@@ -31,9 +35,21 @@ jobs:
           KAKAO_REFRESH_TOKEN: ${{ secrets.KAKAO_REFRESH_TOKEN }}
           KAKAO_CLIENT_SECRET: ${{ secrets.KAKAO_CLIENT_SECRET }}
           GH_PAT: ${{ secrets.GH_PAT }}
-        run: python3 stockchecker.py ${{ inputs.test_kakao && '--test-kakao' || '' }}
+        run: |
+          if [ "${{ inputs.test_kakao }}" = "true" ]; then
+            python3 stockchecker.py --test-kakao
+          else
+            python3 stockchecker.py --loop "${{ inputs.loop_seconds || 20400 }}" --interval 60
+          fi
+      # 알림을 보냈으면 더 돌 필요 없으니 워크플로를 끈다
       - name: Disable workflow after notifying
         if: steps.check.outputs.notified == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh workflow disable stock-check --repo ${{ github.repository }}
+      # 정상 종료(재고 없음)면 다음 실행을 스스로 시작 → 끊김 없이 이어달리기
+      - name: Start next run
+        if: steps.check.outcome == 'success' && steps.check.outputs.notified != 'true' && inputs.test_kakao != true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run stockcheck.yml --repo ${{ github.repository }} --ref ${{ github.ref_name }}
