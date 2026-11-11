@@ -72,6 +72,9 @@ def save_new_refresh_token(new_rt):
 
 def send_kakao(text):
     access = refresh_access_token()
+    # 링크 도메인이 카카오 앱에 등록돼 있지 않으면 버튼 링크가 localhost로 가므로 본문에도 URL을 직접 넣는다
+    text = f"{text}\n{URL}"
+    assert len(text) <= 200, f"카카오 text 한도(200자) 초과: {len(text)}"
     template = {"object_type": "text", "text": text,
                 "link": {"web_url": URL, "mobile_web_url": URL}, "button_title": "상품 페이지 열기"}
     res = post("https://kapi.kakao.com/v2/api/talk/memo/default/send",
@@ -89,7 +92,7 @@ def main():
     args = ap.parse_args()
 
     if args.test_kakao:
-        send_kakao("✅ 요기보 재고 알림 테스트입니다. 이 메시지가 보이면 설정 완료!")
+        send_kakao("✅ 재고 알림 테스트입니다.")
         return 0
 
     stock = fetch_stock()
@@ -97,8 +100,7 @@ def main():
     avail = {c: n for c, n in stock.items() if n > 0}
     if args.once or not avail:
         return 0
-    send_kakao("🎉 허기보 프리미엄 플러스 재고 떴어요!\n"
-               + "\n".join(f"- {c}: {n}개" for c, n in avail.items()))
+    send_kakao("🎉 허기보 재고 떴어요! " + ", ".join(avail))
     return 0
 
 
